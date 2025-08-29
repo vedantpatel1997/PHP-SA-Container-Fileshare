@@ -2,178 +2,169 @@
 require_once 'envloader.php';
 require_once 'navigation.php';
 
-// Initialize variables
-$blobStatus = 'unknown';
-$fileStatus = 'unknown';
-$blobError = '';
-$fileError = '';
-$showPhpInfo = isset($_GET['phpinfo']);
+$account = getenv('AZURE_STORAGE_ACCOUNT');
+$container = getenv('AZURE_BLOB_CONTAINER');
+$share = getenv('AZURE_FILE_SHARE');
+$sas = getenv('AZURE_SAS_TOKEN');
 
-// Check blob storage connectivity
-$accountName = getenv('AZURE_STORAGE_ACCOUNT');
-$containerName = getenv('AZURE_BLOB_CONTAINER');
-$sasToken = getenv('AZURE_SAS_TOKEN');
+$testBlob = 'healthcheck.jpg';
+$testFile = 'healthcheck.jpg';
 
-if (!empty($accountName) && !empty($containerName) && !empty($sasToken)) {
-    $blobUrl = "https://$accountName.blob.core.windows.net/$containerName?restype=container&comp=list&$sasToken";
+$results = ['blob' => [], 'file' => []];
+$hasWarning = false;
 
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'timeout' => 10
-        ]
-    ]);
+// Validate SAS token format
+function validateSAS($sas)
+{
+    return !empty($sas) && strpos($sas, 'sig=') !== false;
+}
 
-    $response = @file_get_contents($blobUrl, false, $context);
-    if ($response !== FALSE) {
-        $blobStatus = 'ok';
-    } else {
-        $blobStatus = 'error';
-        $blobError = "Unable to connect to blob container. Check credentials and network connectivity.";
+// Encode path parts for safe URLs
+function encodePath($path)
+{
+    return implode('/', array_map('rawurlencode', explode('/', $path)));
+}
+
+// Fetch file contents (server-side)
+function fetchFileContents($url)
+{
+    return @file_get_contents($url);
+}
+
+// ------------------- BLOB CHECK -------------------
+$results['blob'][] = validateSAS($sas)
+    ? ['status' => 'ok', 'message' => 'Blob SAS token is valid.']
+    : ['status' => 'fail', 'message' => 'Blob SAS token is missing or invalid.'];
+
+if (validateSAS($sas)) {
+    $listUrl = "https://$account.blob.core.windows.net/$container?restype=container&comp=list&$sas";
+    $response = @file_get_contents($listUrl);
+    $xmlOk = $response !== false && @simplexml_load_string($response) !== false;
+    $results['blob'][] = $xmlOk
+        ? ['status' => 'ok', 'message' => 'Blob container list accessible.']
+        : ['status' => 'warn', 'message' => 'Cannot list blobs. Listing may be restricted or private endpoint in use.'];
+
+    $blobUrl = "https://$account.blob.core.windows.net/$container/" . encodePath($testBlob) . "?$sas";
+    $imgContent = fetchFileContents($blobUrl);
+    $results['blob'][] = ($imgContent !== false)
+        ? ['status' => 'ok', 'message' => "Blob healthcheck image accessible.", "content" => $imgContent]
+        : ['status' => 'fail', 'message' => "Blob healthcheck image cannot be accessed. Make sure server can reach storage account (VPN may be required)."];
+}
+
+// ------------------- FILE SHARE CHECK -------------------
+$results['file'][] = validateSAS($sas)
+    ? ['status' => 'ok', 'message' => 'File share SAS token is valid.']
+    : ['status' => 'fail', 'message' => 'File share SAS token is missing or invalid.'];
+
+if (validateSAS($sas)) {
+    $listUrl = "https://$account.file.core.windows.net/$share?restype=directory&comp=list&$sas";
+    $response = @file_get_contents($listUrl);
+    $xmlOk = $response !== false && @simplexml_load_string($response) !== false;
+    $results['file'][] = $xmlOk
+        ? ['status' => 'ok', 'message' => 'File share list accessible.']
+        : ['status' => 'warn', 'message' => 'Cannot list files. Listing may be restricted or private endpoint in use.'];
+
+    $fileUrl = "https://$account.file.core.windows.net/$share/" . encodePath($testFile) . "?$sas";
+    $fileContent = fetchFileContents($fileUrl);
+    $results['file'][] = ($fileContent !== false)
+        ? ['status' => 'ok', 'message' => "File healthcheck image accessible.", "content" => $fileContent]
+        : ['status' => 'fail', 'message' => "File healthcheck image cannot be accessed. Make sure server can reach storage account (VPN may be required)."];
+}
+
+// Check if any warn/fail exists
+foreach ($results as $checks) {
+    foreach ($checks as $c) {
+        if (in_array($c['status'], ['warn', 'fail'])) {
+            $hasWarning = true;
+            break 2;
+        }
     }
-} else {
-    $blobStatus = 'error';
-    $blobError = "Missing configuration for blob storage.";
 }
 
-// Check file share connectivity
-$shareName = getenv('AZURE_FILE_SHARE');
-
-if (!empty($accountName) && !empty($shareName) && !empty($sasToken)) {
-    $fileUrl = "https://$accountName.file.core.windows.net/$shareName?restype=directory&comp=list&$sasToken";
-
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'timeout' => 10
-        ]
-    ]);
-
-    $response = @file_get_contents($fileUrl, false, $context);
-    if ($response !== FALSE) {
-        $fileStatus = 'ok';
-    } else {
-        $fileStatus = 'error';
-        $fileError = "Unable to connect to file share. Check credentials and network connectivity.";
-    }
-} else {
-    $fileStatus = 'error';
-    $fileError = "Missing configuration for file share.";
-}
-
-// Display PHPInfo if requested
-if ($showPhpInfo) {
-    phpinfo();
-    exit;
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Health Check - Azure Storage Explorer</title>
+    <title>Azure Storage Health Check</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            background: #f8f9fa;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        .card {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-ok {
+            color: green;
+            font-weight: bold
+        }
+
+        .status-fail {
+            color: red;
+            font-weight: bold
+        }
+
+        .status-warn {
+            color: orange;
+            font-weight: bold
+        }
+
+        img.healthcheck-img {
+            max-width: 200px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: block;
+        }
+
+        .alert-general {
+            padding: 10px 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+    </style>
 </head>
 
 <body>
     <?php renderNavigation('healthcheck.php'); ?>
-
     <div class="container mt-4">
-        <div class="row">
-            <div class="col-12">
-                <div class="page-header">
-                    <h1>System Health Check</h1>
-                    <p class="lead">Monitor connectivity to your Azure Storage resources</p>
-                </div>
+        <h1>Azure Storage Health Check</h1>
+        <p>Validates SAS token, container/share list, and actual file access using healthcheck images (server-side
+            checks).</p>
 
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title">Blob Storage Status</h5>
-                            </div>
-                            <div class="card-body">
-                                <div
-                                    class="health-status <?php echo $blobStatus == 'ok' ? 'health-ok' : 'health-error'; ?>">
-                                    <strong>Status:</strong>
-                                    <?php echo $blobStatus == 'ok' ? 'OK' : 'ERROR'; ?>
-                                </div>
-
-                                <?php if ($blobStatus == 'error'): ?>
-                                    <div class="alert alert-danger">
-                                        <?php echo $blobError; ?>
-                                    </div>
-                                <?php else: ?>
-                                    <p>Successfully connected to blob container.</p>
-                                <?php endif; ?>
-
-                                <ul class="list-group">
-                                    <li class="list-group-item">
-                                        <strong>Account:</strong> <?php echo $accountName; ?>
-                                    </li>
-                                    <li class="list-group-item">
-                                        <strong>Container:</strong> <?php echo $containerName; ?>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title">File Share Status</h5>
-                            </div>
-                            <div class="card-body">
-                                <div
-                                    class="health-status <?php echo $fileStatus == 'ok' ? 'health-ok' : 'health-error'; ?>">
-                                    <strong>Status:</strong>
-                                    <?php echo $fileStatus == 'ok' ? 'OK' : 'ERROR'; ?>
-                                </div>
-
-                                <?php if ($fileStatus == 'error'): ?>
-                                    <div class="alert alert-danger">
-                                        <?php echo $fileError; ?>
-                                    </div>
-                                <?php else: ?>
-                                    <p>Successfully connected to file share.</p>
-                                <?php endif; ?>
-
-                                <ul class="list-group">
-                                    <li class="list-group-item">
-                                        <strong>Account:</strong> <?php echo $accountName; ?>
-                                    </li>
-                                    <li class="list-group-item">
-                                        <strong>Share:</strong> <?php echo $shareName; ?>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="row mt-4">
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title">System Information</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="d-grid gap-2">
-                                    <a href="healthcheck.php?phpinfo=1" class="btn btn-info">View PHPInfo</a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="alert-general">
+            <strong>Note:</strong> If any images fail to load or checks report warnings, make sure your server is
+            connected to the VPN or has network access to the storage accounts. Without VPN or proper network access,
+            results may appear inaccurate.
         </div>
-    </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        <?php foreach ($results as $type => $checks): ?>
+            <div class="card">
+                <h4><?php echo strtoupper($type); ?></h4>
+                <ul>
+                    <?php foreach ($checks as $c): ?>
+                        <li class="status-<?php echo $c['status']; ?>">
+                            [<?php echo strtoupper($c['status']); ?>] <?php echo $c['message']; ?>
+                            <?php if (isset($c['content']) && $c['status'] == 'ok'): ?>
+                                <br><img src="data:image/jpeg;base64,<?php echo base64_encode($c['content']); ?>"
+                                    class="healthcheck-img" alt="healthcheck image">
+                            <?php endif; ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endforeach; ?>
+    </div>
 </body>
 
 </html>
