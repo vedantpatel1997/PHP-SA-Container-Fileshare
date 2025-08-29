@@ -1,0 +1,53 @@
+# Variables
+RESOURCE_GROUP="Wordpress-PHP"
+STORAGE_ACCOUNT="storageaccountvp"
+FILE_SHARE="receipe-fileshare"
+
+# Expiry time (1 day from now, adjust as needed)
+EXPIRY=$(date -u -d "1 day" '+%Y-%m-%dT%H:%MZ')
+
+# Generate SAS token for the file share
+az storage share generate-sas \
+  --account-name $STORAGE_ACCOUNT \
+  --name $FILE_SHARE \
+  --https-only \
+  --permissions rl \
+  --expiry $EXPIRY \
+  --output tsv
+
+
+# Variables
+RESOURCE_GROUP="Wordpress-PHP"
+STORAGE_ACCOUNT="storageaccountvp"
+CONTAINER="receipe-container"
+
+# Expiry (30 days from now, adjust as needed)
+EXPIRY=$(date -u -d "30 days" '+%Y-%m-%dT%H:%MZ')
+
+# Generate SAS for container
+az storage container generate-sas \
+  --account-name $STORAGE_ACCOUNT \
+  --name $CONTAINER \
+  --https-only \
+  --permissions rl \
+  --expiry $EXPIRY \
+  --output tsv
+
+
+
+# Variables
+STORAGE_ACCOUNT="storageaccountvp"
+RESOURCE_GROUP="Wordpress-PHP"
+
+# Expiry (30 days from now)
+EXPIRY=$(date -u -d "30 days" '+%Y-%m-%dT%H:%MZ')
+
+# Generate account-level SAS (Blob + File only)
+az storage account generate-sas \
+  --account-name $STORAGE_ACCOUNT \
+  --resource-types sco \
+  --services bf \
+  --permissions rl \
+  --expiry $EXPIRY \
+  --https-only \
+  --output tsv
