@@ -41,60 +41,65 @@ body { font-family: 'Segoe UI', sans-serif; background-color: #f8f9fa; margin: 0
     </div>
 
     <?php if (!empty($error)): ?>
-        <div class="alert alert-danger"><?php echo $error; ?></div>
+            <div class="alert alert-danger"><?php echo $error; ?></div>
     <?php endif; ?>
 
     <?php if (empty($images) && empty($error)): ?>
-        <div class="alert alert-info">No images found.</div>
+            <div class="alert alert-info">No images found.</div>
     <?php endif; ?>
 
     <div class="gallery-container">
         <?php foreach ($images as $img): ?>
-            <div class="card">
-                <img src="<?php echo htmlspecialchars($img['url']); ?>" class="card-img-top" alt="<?php echo htmlspecialchars($img['name']); ?>">
-                <div class="card-body">
-                    <h6 class="card-title" title="<?php echo htmlspecialchars($img['name']); ?>">
-                        <?php echo htmlspecialchars($img['name']); ?>
-                    </h6>
-                    <div class="card-text">
-                        <?php
-                        $props = [];
-                        $count = 0;
-                        foreach ($img as $k => $v) {
-                            if (in_array($k, ['url','name'])) continue;
-                            $props[$k] = $v;
-                        }
-                        $firstFive = array_slice($props, 0, 5, true);
-                        $rest = array_slice($props, 5, null, true);
-                        ?>
-                        <div class="first-properties">
-                            <?php foreach ($firstFive as $k => $v): ?>
-                                <strong><?php echo htmlspecialchars(ucwords(str_replace('-', ' ', $k))); ?>:</strong>
-                                <?php
-                                if (strtolower($k) === 'content-length') {
-                                    $sizeKB = round((int)$v / 1024, 2);
-                                    echo $sizeKB >= 1024 ? round($sizeKB/1024,2)." MB" : $sizeKB." KB";
-                                } else { echo htmlspecialchars($v); }
-                                ?><br>
-                            <?php endforeach; ?>
-                        </div>
-                        <?php if(!empty($rest)): ?>
-                            <div class="more-properties">
-                                <?php foreach ($rest as $k => $v): ?>
-                                    <strong><?php echo htmlspecialchars(ucwords(str_replace('-', ' ', $k))); ?>:</strong>
-                                    <?php
-                                    if (strtolower($k) === 'content-length') {
-                                        $sizeKB = round((int)$v / 1024, 2);
-                                        echo $sizeKB >= 1024 ? round($sizeKB/1024,2)." MB" : $sizeKB." KB";
-                                    } else { echo htmlspecialchars($v); }
-                                    ?><br>
+                <div class="card">
+                    <img src="<?php echo htmlspecialchars($img['url']); ?>" class="card-img-top" alt="<?php echo htmlspecialchars($img['name']); ?>">
+                    <div class="card-body">
+                        <h6 class="card-title" title="<?php echo htmlspecialchars($img['name']); ?>">
+                            <?php echo htmlspecialchars($img['name']); ?>
+                        </h6>
+                        <div class="card-text">
+                            <?php
+                            $props = [];
+                            $count = 0;
+                            foreach ($img as $k => $v) {
+                                if (in_array($k, ['url', 'name']))
+                                    continue;
+                                $props[$k] = $v;
+                            }
+                            $firstFive = array_slice($props, 0, 5, true);
+                            $rest = array_slice($props, 5, null, true);
+                            ?>
+                            <div class="first-properties">
+                                <?php foreach ($firstFive as $k => $v): ?>
+                                        <strong><?php echo htmlspecialchars(ucwords(str_replace('-', ' ', $k))); ?>:</strong>
+                                        <?php
+                                        if (strtolower($k) === 'content-length') {
+                                            $sizeKB = round((int) $v / 1024, 2);
+                                            echo $sizeKB >= 1024 ? round($sizeKB / 1024, 2) . " MB" : $sizeKB . " KB";
+                                        } else {
+                                            echo htmlspecialchars($v);
+                                        }
+                                        ?><br>
                                 <?php endforeach; ?>
                             </div>
-                            <span class="toggle-more" onclick="toggleAll(event)">... more</span>
-                        <?php endif; ?>
+                            <?php if (!empty($rest)): ?>
+                                    <div class="more-properties">
+                                        <?php foreach ($rest as $k => $v): ?>
+                                                <strong><?php echo htmlspecialchars(ucwords(str_replace('-', ' ', $k))); ?>:</strong>
+                                                <?php
+                                                if (strtolower($k) === 'content-length') {
+                                                    $sizeKB = round((int) $v / 1024, 2);
+                                                    echo $sizeKB >= 1024 ? round($sizeKB / 1024, 2) . " MB" : $sizeKB . " KB";
+                                                } else {
+                                                    echo htmlspecialchars($v);
+                                                }
+                                                ?><br>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <span class="toggle-more" onclick="toggleAll(event)">... more</span>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
-            </div>
         <?php endforeach; ?>
     </div>
 </div>
