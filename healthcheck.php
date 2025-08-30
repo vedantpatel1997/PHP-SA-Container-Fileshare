@@ -12,6 +12,7 @@ $testFile = 'healthcheck.jpg';
 
 $results = ['blob' => [], 'file' => []];
 $hasWarning = false;
+$showPHPInfo = isset($_GET['phpinfo']);
 
 // Validate SAS token format
 function validateSAS($sas)
@@ -47,7 +48,7 @@ if (validateSAS($sas)) {
     $blobUrl = "https://$account.blob.core.windows.net/$container/" . encodePath($testBlob) . "?$sas";
     $imgContent = fetchFileContents($blobUrl);
     $results['blob'][] = ($imgContent !== false)
-        ? ['status' => 'ok', 'message' => "Blob healthcheck image accessible.", "content" => $imgContent]
+        ? ['status' => 'ok', 'message' => "Blob healthcheck image accessible."]
         : ['status' => 'fail', 'message' => "Blob healthcheck image cannot be accessed. Make sure server can reach storage account (VPN may be required)."];
 }
 
@@ -67,7 +68,7 @@ if (validateSAS($sas)) {
     $fileUrl = "https://$account.file.core.windows.net/$share/" . encodePath($testFile) . "?$sas";
     $fileContent = fetchFileContents($fileUrl);
     $results['file'][] = ($fileContent !== false)
-        ? ['status' => 'ok', 'message' => "File healthcheck image accessible.", "content" => $fileContent]
+        ? ['status' => 'ok', 'message' => "File healthcheck image accessible."]
         : ['status' => 'fail', 'message' => "File healthcheck image cannot be accessed. Make sure server can reach storage account (VPN may be required)."];
 }
 
@@ -81,6 +82,24 @@ foreach ($results as $checks) {
     }
 }
 
+// Capture phpinfo output if requested
+if ($showPHPInfo) {
+    ob_start();
+    phpinfo();
+    $phpinfo = ob_get_clean();
+    
+    // Extract just the body content from phpinfo output
+    if (preg_match('/<body>(.*?)<\/body>/s', $phpinfo, $matches)) {
+        $phpinfo = $matches[1];
+    }
+    
+    // Add some basic styling to phpinfo table
+    $phpinfo = str_replace(
+        ['<table', '<td', '<th', '<h1', '<h2'],
+        ['<table class="table table-bordered table-sm"', '<td class="p-2"', '<th class="p-2 bg-light"', '<h2', '<h3 class="mt-4"'],
+        $phpinfo
+    );
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -97,40 +116,89 @@ foreach ($results as $checks) {
 
         .card {
             margin-bottom: 20px;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            border: none;
         }
 
         .status-ok {
-            color: green;
-            font-weight: bold
+            color: #198754;
+            font-weight: 500;
         }
 
         .status-fail {
-            color: red;
-            font-weight: bold
+            color: #dc3545;
+            font-weight: 500;
         }
 
         .status-warn {
-            color: orange;
-            font-weight: bold
-        }
-
-        img.healthcheck-img {
-            max-width: 200px;
-            border-radius: 8px;
-            margin-top: 10px;
-            display: block;
+            color: #fd7e14;
+            font-weight: 500;
         }
 
         .alert-general {
-            padding: 10px 15px;
-            margin-bottom: 20px;
+            padding: 16px;
+            margin-bottom: 24px;
             border-radius: 8px;
             background: #fff3cd;
             color: #856404;
             border: 1px solid #ffeeba;
+        }
+        
+        .phpinfo-container {
+            margin-top: 30px;
+            border-top: 1px solid #dee2e6;
+            padding-top: 20px;
+        }
+        
+        .btn-outline-primary {
+            margin-top: 10px;
+        }
+        
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            margin-right: 8px;
+        }
+        
+        .badge-ok {
+            background-color: #d1e7dd;
+        }
+        
+        .badge-fail {
+            background-color: #f8d7da;
+        }
+        
+        .badge-warn {
+            background-color: #fff3cd;
+        }
+        
+        /* Style phpinfo table to fit better with our design */
+        #phpinfo table {
+            width: 100%;
+            margin-bottom: 1rem;
+            color: #212529;
+        }
+        
+        #phpinfo h1 {
+            display: none;
+        }
+        
+        #phpinfo h2 {
+            color: #0d6efd;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        #phpinfo .center {
+            text-align: left;
+        }
+        
+        #phpinfo .e {
+            font-weight: bold;
+            width: 30%;
         }
     </style>
 </head>
@@ -138,33 +206,54 @@ foreach ($results as $checks) {
 <body>
     <?php renderNavigation('healthcheck.php'); ?>
     <div class="container mt-4">
-        <h1>Azure Storage Health Check</h1>
-        <p>Validates SAS token, container/share list, and actual file access using healthcheck images (server-side
-            checks).</p>
-
-        <div class="alert-general">
-            <strong>Note:</strong> If any images fail to load or checks report warnings, make sure your server is
-            connected to the VPN or has network access to the storage accounts. Without VPN or proper network access,
-            results may appear inaccurate.
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Azure Storage Health Check</h1>
+            <?php if (!$showPHPInfo): ?>
+                <a href="?phpinfo=1" class="btn btn-outline-primary">View PHP Info</a>
+            <?php else: ?>
+                <a href="?" class="btn btn-outline-secondary">Back to Health Check</a>
+            <?php endif; ?>
         </div>
+        
+        <?php if (!$showPHPInfo): ?>
+            <p class="text-muted">Validates SAS token, container/share list, and actual file access using healthcheck images (server-side checks).</p>
 
-        <?php foreach ($results as $type => $checks): ?>
-            <div class="card">
-                <h4><?php echo strtoupper($type); ?></h4>
-                <ul>
-                    <?php foreach ($checks as $c): ?>
-                        <li class="status-<?php echo $c['status']; ?>">
-                            [<?php echo strtoupper($c['status']); ?>] <?php echo $c['message']; ?>
-                            <?php if (isset($c['content']) && $c['status'] == 'ok'): ?>
-                                <br><img src="data:image/jpeg;base64,<?php echo base64_encode($c['content']); ?>"
-                                    class="healthcheck-img" alt="healthcheck image">
-                            <?php endif; ?>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
+            <?php if ($hasWarning): ?>
+            <div class="alert-general">
+                <strong>Note:</strong> Some checks reported warnings or failures. Make sure your server is connected to the VPN or has network access to the storage accounts.
             </div>
-        <?php endforeach; ?>
+            <?php endif; ?>
+
+            <?php foreach ($results as $type => $checks): ?>
+                <div class="card">
+                    <h4 class="mb-3"><?php echo strtoupper($type); ?> Storage</h4>
+                    <ul class="list-unstyled">
+                        <?php foreach ($checks as $c): ?>
+                            <li class="mb-2 d-flex align-items-center">
+                                <span class="status-badge badge-<?php echo $c['status']; ?>">
+                                    <?php echo strtoupper($c['status']); ?>
+                                </span>
+                                <span class="status-<?php echo $c['status']; ?>">
+                                    <?php echo $c['message']; ?>
+                                </span>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+        
+        <?php if ($showPHPInfo): ?>
+            <div class="phpinfo-container">
+                <h2 class="mb-3">PHP Information</h2>
+                <div id="phpinfo">
+                    <?php echo $phpinfo; ?>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>
