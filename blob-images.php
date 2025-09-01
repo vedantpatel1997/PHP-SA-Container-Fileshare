@@ -17,9 +17,16 @@ $listUrl = !empty($path)
 
 $images = [];
 $error = '';
+$debug = ['listUrl' => $listUrl, 'items' => []];
+
+// ---- Helpers ----
+function console_log($data)
+{
+    echo "<script>console.log(" . json_encode($data) . ");</script>";
+}
 
 try {
-    // Debug log
+    // Debug log (server side)
     error_log("Fetching blob list from: " . $listUrl);
 
     $response = @file_get_contents($listUrl);
@@ -32,7 +39,7 @@ try {
         throw new Exception("Error parsing XML response");
     }
 
-    // Debug log raw XML
+    // Debug log raw XML (server side)
     error_log("Blob list raw XML:\n" . $response);
 
     if (!empty($xml->Blobs->Blob)) {
@@ -65,7 +72,14 @@ try {
                     'url' => $blobUrl,
                 ], $props);
 
-                // Debug log each blob
+                // Collect debug info for console
+                $debug['items'][] = [
+                    'name' => $blobName,
+                    'url' => $blobUrl,
+                    'props' => $props,
+                ];
+
+                // Debug log each blob (server side)
                 error_log("Blob: " . print_r(end($images), true));
             }
         }
@@ -80,3 +94,6 @@ $folderPathOrSource = "Container: $containerName" . (!empty($path) ? " in $path"
 $navPage = 'blob-images.php';
 
 require 'gallery-template.php';
+
+// Dump structured logs to the browser console
+console_log($debug);
